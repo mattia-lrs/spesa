@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spesa e buoni</title>
+<style>
+:root{
+  --bg:#EEF3F1; --card:#FFFFFF; --ink:#10201C; --mute:#5B6F69; --line:#D5E0DC;
+  --accent:#0F766E; --accent-ink:#FFFFFF; --warn:#B45309; --bad:#B42318; --cell:#CBD9D4;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1715; --card:#16231F; --ink:#E7F0ED; --mute:#8FA59E; --line:#26362F;
+    --accent:#2DD4BF; --accent-ink:#06201C; --warn:#F5A524; --bad:#F97066; --cell:#2A3B35;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1715; --card:#16231F; --ink:#E7F0ED; --mute:#8FA59E; --line:#26362F;
+  --accent:#2DD4BF; --accent-ink:#06201C; --warn:#F5A524; --bad:#F97066; --cell:#2A3B35;
+}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{
+  margin:0;height:100%;background:var(--bg);color:var(--ink);
+  font-family:"Avenir Next","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+  font-variant-numeric:tabular-nums;
+}
+.app{display:flex;flex-direction:column;height:100%;max-width:520px;margin:0 auto}
+.top{padding:20px 20px 14px}
+.label{margin:0;font-size:.95rem;color:var(--mute)}
+.total{margin:2px 0 10px;font-size:3.4rem;font-weight:700;letter-spacing:-.02em;line-height:1.05}
+.buoni{margin:0;font-size:1.35rem;font-weight:650;color:var(--accent)}
+.buoni.over{color:var(--warn)}
+.hint{margin:4px 0 0;font-size:.95rem;color:var(--mute);min-height:1.4em;line-height:1.4}
+.meter{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;margin-top:12px}
+.meter i{height:10px;border-radius:3px;background:var(--cell)}
+.meter i.on{background:var(--accent)}
+.meter.over i.on{background:var(--warn)}
+.list{flex:1;overflow-y:auto;margin:0;padding:0 20px;list-style:none}
+.list li{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 0;border-top:1px solid var(--line);font-size:1.1rem;
+}
+.list li:last-child{border-bottom:1px solid var(--line)}
+.list .n{color:var(--mute);font-size:.9rem;margin-right:10px;min-width:1.8em}
+.list .p{flex:1}
+.del{
+  border:0;background:transparent;color:var(--mute);font-size:1.5rem;line-height:1;
+  width:44px;height:44px;border-radius:10px;cursor:pointer;
+}
+.del:hover{color:var(--bad)}
+.empty{padding:24px 0;color:var(--mute);line-height:1.5;border-top:1px solid var(--line)}
+.bar{padding:12px 20px 14px;background:var(--card);border-top:1px solid var(--line)}
+.row{display:flex;gap:10px}
+#price{
+  flex:1;min-width:0;font:inherit;font-size:1.5rem;font-weight:600;color:var(--ink);
+  background:var(--bg);border:2px solid var(--line);border-radius:12px;padding:12px 14px;
+  font-variant-numeric:tabular-nums;
+}
+#price::placeholder{color:var(--mute);font-weight:400}
+#price.err{border-color:var(--bad)}
+.add{
+  font:inherit;font-size:1.1rem;font-weight:650;border:0;border-radius:12px;padding:0 22px;
+  background:var(--accent);color:var(--accent-ink);cursor:pointer;
+}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.tools{display:flex;justify-content:space-between;margin-top:10px}
+.tools button{
+  font:inherit;font-size:.95rem;color:var(--mute);background:transparent;border:0;
+  padding:10px 4px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;
+}
+.tools button.sure{color:var(--bad);font-weight:650}
+.tools button:disabled{opacity:.4;cursor:default;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="top" aria-live="polite">
+    <p class="label">Totale spesa</p>
+    <p id="total" class="total">0,00 €</p>
+    <p id="buoni" class="buoni">Aggiungi il primo prezzo</p>
+    <p id="hint" class="hint"></p>
+    <div id="meter" class="meter" role="img" aria-label="Buoni usati su 8"></div>
+  </section>
+
+  <ul id="list" class="list"></ul>
+
+  <div class="bar">
+    <div class="row">
+      <input id="price" type="text" inputmode="decimal" autocomplete="off" enterkeyhint="done" placeholder="Prezzo, es. 2,50" aria-label="Prezzo del prodotto">
+      <button id="add" class="add" type="button">Aggiungi</button>
+    </div>
+    <div class="tools">
+      <button id="undo" type="button">Annulla ultimo</button>
+      <button id="clear" type="button">Svuota carrello</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var VAL = 800, MAXB = 8;
+  var items = [];
+  try { items = (JSON.parse(localStorage.getItem('spesa-buoni') || '[]') || []).filter(Number.isInteger); } catch(e){}
+
+  var $ = function(id){ return document.getElementById(id); };
+  var price = $('price'), list = $('list'), clearBtn = $('clear'), undoBtn = $('undo');
+  var armed = false;
+
+  function eur(c){ return (c/100).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €'; }
+  function save(){ try { localStorage.setItem('spesa-buoni', JSON.stringify(items)); } catch(e){} }
+
+  function render(){
+    var total = items.reduce(function(a,b){ return a+b; }, 0);
+    $('total').textContent = eur(total);
+
+    var need = Math.ceil(total / VAL), over = need > MAXB, used = Math.min(need, MAXB);
+    var buoni = $('buoni'), hint = $('hint');
+    buoni.classList.toggle('over', over);
+
+    if (total === 0){
+      buoni.textContent = 'Aggiungi il primo prezzo';
+      hint.textContent = '';
+    } else if (over){
+      buoni.textContent = 'Usa 8 buoni (' + eur(MAXB*VAL) + ')';
+      hint.textContent = 'Il resto di ' + eur(total - MAXB*VAL) + ' lo paghi con un altro metodo.';
+    } else {
+      buoni.textContent = 'Usa ' + need + (need === 1 ? ' buono' : ' buoni') + ' (' + eur(need*VAL) + ')';
+      var slack = need*VAL - total;
+      hint.textContent = slack === 0
+        ? 'Quadra perfetto, nessuna differenza persa.'
+        : 'Puoi aggiungere ancora ' + eur(slack) + ' senza usare un buono in più.';
+    }
+
+    var m = $('meter');
+    m.classList.toggle('over', over);
+    m.innerHTML = '';
+    for (var i = 0; i < MAXB; i++){
+      var c = document.createElement('i');
+      if (i < used) c.className = 'on';
+      m.appendChild(c);
+    }
+
+    list.innerHTML = '';
+    if (!items.length){
+      var e = document.createElement('li');
+      e.className = 'empty';
+      e.textContent = 'Nessun prezzo. Scrivilo qui sotto e premi Invio.';
+      list.appendChild(e);
+    } else {
+      for (var k = items.length - 1; k >= 0; k--){
+        (function(idx){
+          var li = document.createElement('li');
+          var n = document.createElement('span'); n.className = 'n'; n.textContent = (idx+1) + '.';
+          var p = document.createElement('span'); p.className = 'p'; p.textContent = eur(items[idx]);
+          var d = document.createElement('button'); d.type = 'button'; d.className = 'del';
+          d.textContent = '×'; d.setAttribute('aria-label', 'Elimina ' + eur(items[idx]));
+          d.onclick = function(){ items.splice(idx,1); save(); render(); };
+          li.appendChild(n); li.appendChild(p); li.appendChild(d);
+          list.appendChild(li);
+        })(k);
+      }
+    }
+    undoBtn.disabled = clearBtn.disabled = !items.length;
+    if (!items.length) disarm();
+  }
+
+  function parse(s){
+    s = s.replace(/€/g,'').replace(/\s/g,'').replace(',','.');
+    if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
+    var c = Math.round(parseFloat(s) * 100);
+    return (c > 0 && c < 100000) ? c : null;
+  }
+
+  function add(){
+    var c = parse(price.value);
+    if (c === null){
+      price.classList.add('err');
+      $('hint').textContent = 'Scrivi un prezzo valido, per esempio 2,50.';
+      return;
+    }
+    price.classList.remove('err');
+    items.push(c); save();
+    price.value = '';
+    render();
+    price.focus();
+  }
+
+  function disarm(){ armed = false; clearBtn.classList.remove('sure'); clearBtn.textContent = 'Svuota carrello'; }
+
+  price.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); add(); } });
+  price.addEventListener('input', function(){ price.classList.remove('err'); });
+  $('add').onclick = add;
+  undoBtn.onclick = function(){ items.pop(); save(); render(); price.focus(); };
+  clearBtn.onclick = function(){
+    if (!armed){ armed = true; clearBtn.classList.add('sure'); clearBtn.textContent = 'Tocca ancora per svuotare'; return; }
+    items = []; save(); disarm(); render();
+  };
+
+  render();
+})();
+</script>
+</body>
+</html>
