@@ -125,22 +125,22 @@ body{
     var total = items.reduce(function(a,b){ return a+b; }, 0);
     $('total').textContent = eur(total);
 
-    var need = Math.ceil(total / VAL), over = need > MAXB, used = Math.min(need, MAXB);
+    var full = Math.floor(total / VAL), over = full > MAXB, used = Math.min(full, MAXB);
+    var covered = used * VAL, rest = total - covered;
     var buoni = $('buoni'), hint = $('hint');
     buoni.classList.toggle('over', over);
 
     if (total === 0){
       buoni.textContent = 'Aggiungi il primo prezzo';
       hint.textContent = '';
-    } else if (over){
-      buoni.textContent = 'Usa 8 buoni (' + eur(MAXB*VAL) + ')';
-      hint.textContent = 'Il resto di ' + eur(total - MAXB*VAL) + ' lo paghi con un altro metodo.';
+    } else if (used === 0){
+      buoni.textContent = 'Ancora sotto 8 \u20ac';
+      hint.textContent = 'Mancano ' + eur(VAL - total) + ' per usare il primo buono.';
     } else {
-      buoni.textContent = 'Usa ' + need + (need === 1 ? ' buono' : ' buoni') + ' (' + eur(need*VAL) + ')';
-      var slack = need*VAL - total;
-      hint.textContent = slack === 0
-        ? 'Quadra perfetto, nessuna differenza persa.'
-        : 'Puoi aggiungere ancora ' + eur(slack) + ' senza usare un buono in più.';
+      buoni.textContent = 'Usa ' + used + (used === 1 ? ' buono' : ' buoni') + ' (' + eur(covered) + ')';
+      if (rest === 0) hint.textContent = 'Quadra perfetto, niente da pagare in pi\u00f9.';
+      else if (over) hint.textContent = 'Il resto di ' + eur(rest) + ' lo paghi con un altro metodo.';
+      else hint.textContent = 'Il resto di ' + eur(rest) + ' lo paghi con carta o contanti. Con altri ' + eur(VAL - rest) + ' usi un buono in pi\u00f9.';
     }
 
     var m = $('meter');
